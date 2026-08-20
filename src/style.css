@@ -1,0 +1,27 @@
+@import "tailwindcss";
+@plugin "daisyui" {
+  themes: dark --default;
+}
+
+@layer utilities {
+  .canvas-dots {
+    background-image: radial-gradient(
+      circle at 1px 1px,
+      color-mix(in oklab, var(--color-base-content) 22%, transparent) 1px,
+      transparent 0
+    );
+    background-size: 24px 24px;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 48vh,
+      black 62vh
+    );
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      transparent 48vh,
+      black 62vh
+    );
+  }
+}
