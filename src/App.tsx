@@ -4,9 +4,10 @@ import TitleBar from "./components/TitleBar";
 import HomePage from "./pages/HomePage";
 import ModelsPage from "./pages/ModelsPage";
 import SettingsPage from "./pages/SettingsPage";
+import { useStore } from "./hooks/useStore";
 
 function App() {
-  const [collapsed, setCollapsed] = useState(false);
+  const [collapsed, setCollapsed] = useStore("sidebar-collapsed", false);
   const [activePage, setActivePage] = useState<PageId>("home");
 
   return (

@@ -22,6 +22,11 @@
       "csp": null
     }
   },
+  "plugins": {
+    "sql": {
+      "preload": ["sqlite:nila.db"]
+    }
+  },
   "bundle": {
     "active": true,
     "targets": "all",
