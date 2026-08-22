@@ -18,6 +18,11 @@ pub struct Model {
     pub provider: String,
     pub url: String,
     pub api_key: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub logo: Option<String>,
+    /// UTC datetime of the last ping check; `None` until first ping.
+    pub last_pinged_at: Option<String>,
     pub status: i64,
     /// 1 = protected from deletion in the UI, 0 = deletable.
     pub locked: i64,
@@ -30,6 +35,9 @@ pub struct NewModel {
     pub provider: String,
     pub url: String,
     pub api_key: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub logo: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -37,6 +45,9 @@ pub struct ModelUpdate {
     pub provider: Option<String>,
     pub url: Option<String>,
     pub api_key: Option<String>,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub logo: Option<String>,
     pub status: Option<i64>,
     pub locked: Option<i64>,
 }
@@ -75,13 +86,20 @@ impl ModelFactory {
         if input.api_key.is_empty() {
             return Err(AppError::Validation("`api_key` is required".into()));
         }
+        if input.name.trim().is_empty() {
+            return Err(AppError::Validation("`name` is required".into()));
+        }
         let api_key = crypto.encrypt(&input.api_key)?;
         let model = sqlx::query_as::<_, Model>(
-            "INSERT INTO models (provider, url, api_key) VALUES (?, ?, ?) RETURNING *",
+            "INSERT INTO models (provider, url, api_key, name, description, logo) \
+             VALUES (?, ?, ?, ?, ?, ?) RETURNING *",
         )
         .bind(input.provider.trim())
         .bind(input.url.trim())
         .bind(api_key)
+        .bind(input.name.trim())
+        .bind(input.description.as_deref())
+        .bind(input.logo.as_deref())
         .fetch_one(&self.pool)
         .await?;
         Self::into_decrypted(crypto, model)
@@ -135,6 +153,21 @@ impl ModelFactory {
         if let Some(url) = patch.url.as_deref() {
             sets.push("url = ?".into());
             params.push(url.trim().to_owned());
+        }
+        if let Some(name) = patch.name.as_deref() {
+            if name.trim().is_empty() {
+                return Err(AppError::Validation("`name` cannot be empty".into()));
+            }
+            sets.push("name = ?".into());
+            params.push(name.trim().to_owned());
+        }
+        if let Some(description) = patch.description.as_deref() {
+            sets.push("description = ?".into());
+            params.push(description.trim().to_owned());
+        }
+        if let Some(logo) = patch.logo.as_deref() {
+            sets.push("logo = ?".into());
+            params.push(logo.trim().to_owned());
         }
         if let Some(api_key) = encrypted_api_key {
             sets.push("api_key = ?".into());
@@ -222,6 +255,28 @@ impl ModelFactory {
         .ok_or_else(|| AppError::NotFound(format!("model {id}")))?;
         Self::into_decrypted(crypto, model)
     }
+
+    /// Record the outcome of a ping: `true`/`1` marks the model active,
+    /// `false`/`0` inactive. Stamps `last_pinged_at` with current UTC time.
+    pub async fn set_ping_status(
+        &self,
+        crypto: &Crypto,
+        id: i64,
+        ping_ok: bool,
+    ) -> Result<Model, AppError> {
+        let status = if ping_ok { STATUS_ACTIVE } else { STATUS_INACTIVE };
+        let model = sqlx::query_as::<_, Model>(
+            "UPDATE models \
+             SET status = ?, last_pinged_at = datetime('now'), updated_at = datetime('now') \
+             WHERE id = ? RETURNING *",
+        )
+        .bind(status)
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?
+        .ok_or_else(|| AppError::NotFound(format!("model {id}")))?;
+        Self::into_decrypted(crypto, model)
+    }
 }
 
 #[tauri::command]
@@ -287,4 +342,15 @@ pub async fn model_set_locked(
 ) -> Result<Model, AppError> {
     let factory = ModelFactory::new(Database::pool(&app).await?);
     factory.set_locked(&state.crypto, id, locked).await
+}
+
+#[tauri::command]
+pub async fn model_set_ping_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    id: i64,
+    ping_ok: bool,
+) -> Result<Model, AppError> {
+    let factory = ModelFactory::new(Database::pool(&app).await?);
+    factory.set_ping_status(&state.crypto, id, ping_ok).await
 }

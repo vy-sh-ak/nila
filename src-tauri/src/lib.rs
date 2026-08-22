@@ -67,6 +67,7 @@ pub fn run() {
             database::model_factory::model_delete,
             database::model_factory::model_set_status,
             database::model_factory::model_set_locked,
+            database::model_factory::model_set_ping_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
